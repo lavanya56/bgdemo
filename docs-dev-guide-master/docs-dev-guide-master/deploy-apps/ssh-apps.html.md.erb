@@ -1,0 +1,266 @@
+---
+title: Accessing Apps with SSH
+owner: Diego
+---
+
+<strong><%= modified_date %></strong>
+
+<i>This page assumes you are using cf CLI v6.13.0 or later.</i>
+
+The cf CLI lets you securely log into remote host VMs running <%=vars.product_full%> application instances. This topic describes the commands that enable SSH access to applications, and enable, disable, and check permissions for such access.
+
+Under the hood, the cf CLI looks up the `app_ssh_oauth_client` identifier in the Cloud Controller `/v2/info` endpoint, and uses this identifier it to query the UAA server for an SSH authorization code. On the target VM side, the SSH proxy contacts the Cloud Controller via the `app_ssh_endpoint` listed in `/v2/info` to confirm permission for SSH access.
+
+## <a id="ssh-commands"></a>Application SSH Commands
+
+<table id='ssh-commands' border="1" class="nice">
+  <tr>
+    <th>cf CLI Command</th>
+    <th>Purpose</th>
+  </tr>
+  <tr>
+    <td>
+      <code>cf enable-ssh</code><br/>
+      <code>cf disable-ssh</code><br/>
+      <code>cf allow-space-ssh</code><br/>
+      <code>cf disallow-space-ssh</code></td>
+    <td><a href="#enable-disable-ssh">Enable and Disable SSH Access</a></td>
+  </tr>
+  <tr>
+    <td>
+      <code>cf ssh-enabled</code><br/>
+      <code>cf space-ssh-allowed</code></td>
+    <td><a href="#check-ssh-permissions">Check SSH Access Permissions</td>
+  </tr>
+  <tr>
+    <td>
+      <code>cf ssh</code><br/>
+    <td><a href="#ssh-command">Securely log into an application container.</td>
+  </tr>
+  <tr>
+    <td>
+      <code>cf ssh-code</code><br/>
+    <td><a href="#other-ssh-access">Enable secure login to an application container <br/> using non-CF SSH tools</a> like <code>ssh</code>, <code>scp</code>, and <code>sftp</code>.</td>
+  </tr>
+</table>
+
+## <a id="enable-disable-ssh"></a>Enabling and Disabling SSH Access
+
+A cloud operator can deploy <%=vars.product_full%> to either allow or prohibit Application SSH across the entire deployment.
+
+Within a deployment that permits SSH access to applications, developers can enable or disable SSH access to individual applications. Space administrators can blanket allow or disallow SSH access to all apps running within a space.
+
+### <a id="configure-ssh-access-apps"></a>Configuring SSH Access at the Application Level
+[cf enable-ssh](http://cli.cloudfoundry.org/en-US/cf/enable-ssh.html) enables SSH access to all instances of an app:
+<pre class="terminal">
+$ cf enable-ssh MY-AWESOME-APP
+</pre>
+
+[cf disable-ssh](http://cli.cloudfoundry.org/en-US/cf/disable-ssh.html) disables SSH access to all instances of an app:
+<pre class="terminal">
+$ cf disable-ssh MY-AWESOME-APP
+</pre>
+
+### <a id="configure-ssh-access-spaces"></a>Configuring SSH Access at the Space Level
+
+[cf allow-space-ssh](http://cli.cloudfoundry.org/en-US/cf/allow-space-ssh.html) allows SSH access into all apps in a space:
+<pre class="terminal">
+$ cf allow-space-ssh SPACE-NAME
+</pre>
+
+[cf disallow-space-ssh](http://cli.cloudfoundry.org/en-US/cf/disallow-space-ssh.html) disallows SSH access into all apps in a space:
+<pre class="terminal">
+$ cf disallow-space-ssh SPACE-NAME
+</pre>
+
+## <a id="check-ssh-permissions"></a>Checking SSH Permissions
+
+[cf ssh-enabled](http://cli.cloudfoundry.org/en-US/cf/ssh-enabled.html) checks whether an app is accessible with SSH:
+<pre class="terminal">$ cf ssh-enabled MY-AWESOME-APP
+ssh support is disabled for 'MY-AWESOME-APP'
+</pre>
+
+[cf space-ssh-allowed](http://cli.cloudfoundry.org/en-US/cf/space-ssh-allowed.html) checks whether all apps running within a space are accessible with SSH:
+<pre class="terminal">
+$ cf space-ssh-allowed SPACE-NAME
+ssh support is enabled in space 'SPACE-NAME'
+</pre>
+
+## <a id="ssh-command"></a>Logging Into an Application Container with cf SSH
+If SSH access is allowed at the deployment, space, and application level, you can run `cf ssh APP-NAME` from the cf CLI to start an interactive SSH session with a VM hosting an application. By default, it accesses the container running first instance of the application, the instance with index 0.
+<pre class="terminal">
+$ cf ssh MY-AWESOME-APP
+</pre>
+
+### <a id="ssh-common-flags"></a>Common cf SSH Flags
+You can tailor [cf ssh](http://cli.cloudfoundry.org/en-US/cf/ssh.html) commands with the following flags, most of which mimic flags for the Unix/Linux `ssh` command. See `cf ssh --help` for more details.
+
+* The `-i` flag targets a specific instance of an application. To log into the VM container hosting the third instance (index=2) of MY-AWESOME-APP, run:
+<pre class='terminal'>
+$ cf ssh MY-AWESOME-APP -i 2
+</pre>
+
+* The `-L` flag enables local port forwarding, binding an output port on your machine to an input port on the application VM. Pass in a local port, and your application VM port and port number, all colon delimited. Optionally, you can also prepend your local network interface, or it defaults to `localhost`.
+<pre class="terminal">
+$ cf ssh MY-AWESOME-APP -L [LOCAL-NETWORK-INTERFACE:]LOCAL-PORT:REMOTE-HOST-NAME:REMOTE-HOST-PORT
+</pre>
+
+* The `-N` flag skips returning a command prompt on the remote machine. This sets up local port forwarding if you do not need to execute commands on the host VM.
+
+* The `-t`, `-tt`, and `-T` flags let you run an SSH session in pseudo-tty mode rather than generate terminal line output.
+
+## <a id="ssh-env"></a>SSH Session Environment
+
+If you want the environment of your interactive SSH session to match the environment of your buildpack-based app, with the same environment variables and working directory, run the following after starting the session:
+
+```
+export HOME=/home/vcap/app
+export TMPDIR=/home/vcap/tmp
+cd /home/vcap/app
+```
+
+Before running the next command, check the contents of the files in both the `/home/vcap/app/.profile` and `/home/vcap/app/.profile.d` directories to make sure they will not perform any actions that are undesirable for your running app. The `.profile.d` directory contains buildpack-specific initialization tasks, and the `.profile` file contains application-specific initialization tasks. 
+
+```
+source /home/vcap/app/.profile.d/*.sh
+source /home/vcap/app/.profile
+```
+
+If the `profile` and `.profile.d` scripts do alter your instance in undesirable ways, you should use discretion in running only the commands from them that you need for environmental setup.
+
+Note also that even after running the above commands, the value of the `VCAP_APPLICATION` environment variable will differ slightly from its value in the environment of the app process, as it will not have the `host`, `instance_id`, `instance_index`, or `port` fields set. These fields are available in other environment variables, as described in the <a href="environment-variable.html#VCAP-APPLICATION">VCAP_APPLICATION</a> documentation.
+
+
+## <a id="other-ssh-access"></a>Application SSH Access without cf CLI
+
+In addition to `cf ssh`, you can use other SSH clients such as `ssh`, `scp`, or `sftp` to access your application, as long as you have SSH permissions.
+
+To securely connect to an application instance, you log in with a specially-formed username that passes information to the SSH proxy running on the host VM. For the password, you use a one-time SSH authorization code generated by [cf ssh-code](http://cli.cloudfoundry.org/en-US/cf/ssh-code.html).  Here is the full procedure:
+
+1. Run `cf app MY-AWESOME-APP --guid` and record the GUID of your target app.
+<pre class="terminal">
+$ cf app MY-AWESOME-APP --guid
+d0a2e11d-e6ca-4120-b32d-140c356906a5
+</pre>
+
+1. Query the `/v2/info` endpoint of your deployment's Cloud Controller. Record the domain name and port of the `app_ssh_endpoint` field. Also note the `app_ssh_host_key_fingerprint` field, which you will compare with the fingerprint returned by the SSH proxy on your target VM.
+<pre class="terminal">
+$ cf curl /v2/info
+{
+   ...
+   "app\_ssh\_endpoint": "ssh.MY-DOMAIN.com:2222",
+   "app\_ssh\_host\_key\_fingerprint": "a6:14:c0:ea:42:07:b2:f7:53:2c:0b:60:e0:00:21:6c",
+   ...
+}
+</pre>
+
+1. Run `cf ssh-code` to obtain a one-time authorization code that substitutes for an SSH password. Or you can run `cf ssh-code | pbcopy` to automatically copy the code to the clipboard.
+<pre class="terminal">
+$ cf ssh-code
+E1x89n
+</pre>
+
+1. Run your `ssh` or other command to connect to the application instance. For the username, use a string of the form cf:APP-GUID/APP-INSTANCE-INDEX@SSH-ENDPOINT, where APP-GUID and SSH-ENDPOINT come from the previous steps. For the port number, pass in the SSH-PORT  also recorded above. APP-INSTANCE-INDEX is the index of the instance you want to access.
+<br/><br/>With the above example, you `ssh` into the container hosting the first instance of your app by running:
+<pre class="terminal">
+$ ssh -p 2222 cf:d0a2e11d-e6ca-4120-b32d-140c356906a5/0<span>@</span>ssh.MY-DOMAIN.com
+</pre>
+<br/>Or you can use `scp` to transfer files by running:
+<pre class="terminal">
+$ scp -P 2222 -o User=cf:d0a2e11d-e6ca-4120-b32d-140c356906a5/0 ssh.MY-DOMAIN.com:REMOTE-FILE-TO-RETRIEVE LOCAL-FILE-DESTINATION
+</pre>
+
+1. When the SSH proxy reports its RSA fingerprint, confirm that it matches the `app_ssh_host_key_fingerprint` recorded above. When prompted for a password, paste in the authorization code that `cf ssh-code` returned.
+<pre class="terminal">
+$ ssh -p 2222 cf:d0a2e11d-e6ca-4120-b32d-140c356906a5/0<span>@</span>ssh.MY-DOMAIN.com
+The authenticity of host '[ssh.MY-DOMAIN.com]:2222 ([203.0.113.5]:2222)' can't be established.
+RSA key fingerprint is a6:14:c0:ea:42:07:b2:f7:53:2c:0b:60:e0:00:21:6c.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '[ssh.MY-DOMAIN.com]:2222 [203.0.113.5]:2222' (RSA) to the list of known hosts.
+cf:d0a2e11d-e6ca-4120-b32d-140<span>@</span>ssh.ketchup.cf-app.com's password:
+vcap@ce4l5164kws:~$
+</pre>
+
+1. That's it. You're in!
+
+
+## <a id="proxy-to-container-auth"></a>Proxy to Container Authentication
+
+A second layer of SSH security runs within each container. When the SSH proxy attempts to handshake with the SSH daemon inside the target
+container, it uses the following fields associated with the `diego-ssh` key in its route to the application instance. This inner layer works invisibly and requires no user action, but is described here to complete the SSH security picture.
+
+### CONTAINER_PORT (required)
+`container_port` indicates which port inside the container the SSH daemon is
+listening on. The proxy attempts to connect to host side mapping of this
+port after authenticating the client.
+
+### HOST_FINGERPRINT (optional)
+When present, `host_fingerprint` declares the expected fingerprint of the SSH
+daemon's host public key. When the fingerprint of the actual target's host key
+does not match the expected fingerprint, the connection is terminated. The
+fingerprint should only contain the hex string generated by `ssh-keygen -l`.
+
+### USER (optional)
+`user` declares the user ID to use during authentication with the container's
+SSH daemon. While this is not a required part of the routing data, it is required
+for password authentication and may be required for public key authentication.
+
+### PASSWORD (optional)
+`password` declares the password to use during password authentication with
+the container's ssh daemon.
+
+### PRIVATE_KEY (optional)
+`private_key` declares the private key to use when authenticating with the
+container's SSH daemon. If present, the key must be a PEM encoded RSA or DSA
+public key.
+
+#### Example Application Process
+```json
+{
+  "process_guid": "ssh-process-guid",
+  "domain": "ssh-experiments",
+  "rootfs": "preloaded:cflinuxfs2",
+  "instances": 1,
+  "start_timeout": 30,
+  "setup": {
+    "download": {
+      "artifact": "diego-sshd",
+      "from": "http://file-server.service.cf.internal.example.com:8080/v1/static/diego-sshd/diego-sshd.tgz",
+      "to": "/tmp",
+      "cache_key": "diego-sshd"
+    }
+  },
+  "action": {
+    "run": {
+      "path": "/tmp/diego-sshd",
+      "args": [
+          "-address=0.0.0.0:2222",
+          "-authorizedKey=ssh-rsa ..."
+      ],
+      "env": [],
+      "resource_limits": {}
+    }
+  },
+  "ports": [ 2222 ],
+  "routes": {
+    "diego-ssh": {
+      "container_port": 2222,
+      "private_key": "PEM encoded PKCS#1 private key"
+    }
+  }
+}
+```
+
+### Daemon discovery
+
+To be accessible via the SSH proxy, containers must host an SSH daemon, expose
+it via a mapped port, and advertise the port in a `diego-ssh` route. If a proxy cannot find the target process or a route, user authentication fails.
+
+```
+  "routes": {
+    "diego-ssh": { "container_port": 2222 }
+  }
+```
+
+The Diego system generates the appropriate process definitions for <%=vars.product_full%> applications which reflect the policies that are in effect.
+

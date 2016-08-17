@@ -1,0 +1,107 @@
+---
+title: Considerations for Designing and Running an Application in the Cloud
+owner: CAPI
+---
+
+<strong><%= modified_date %></strong>
+
+## <a id="app-design"></a>Application Design for the Cloud ##
+
+Applications written in supported application frameworks often run unmodified on
+Cloud Foundry, if the application design follows a few simple guidelines.
+Following these guidelines makes an application cloud-friendly, and facilitates
+deployment to Cloud Foundry and other cloud platforms.
+
+The following guidelines represent best practices for developing modern applications for cloud platforms. For more detailed reading about good app design for the cloud, see [The Twelve-Factor App](http://www.12factor.net).
+
+For more information on features of HTTP routing handled by the Cloud Foundry router, see the [HTTP Routing](../../concepts/http-routing.html) topic. For more information on the lifecycle of application containers, see the [Application Container Lifecycle](app-lifecycle.html) topic.
+
+### <a id="filesystem"></a>Avoid Writing to the Local File System ###
+
+Applications running on Cloud Foundry should not write files to the local file
+system for the following reasons:
+
+* **Local file system storage is short-lived.** When an application instance crashes or stops, the resources assigned to that instance are reclaimed by the platform including any local disk changes made since the app started. When the instance is restarted, the application will start with a new disk image. Although your application can write local files while it is running, the files will disappear after the application restarts.
+
+* **Instances of the same application do not share a local file system.** Each application instance runs in its own isolated container. Thus a file written by one instance is not visible to other instances of the same application. If the files are temporary, this should not be a problem. However, if your application needs the data in the files to persist across application restarts, or the data needs to be shared across all running instances of the application, the local file system should not be used. We recommend using a shared data service like a database or blobstore for this purpose.
+
+For example, instead of using the local file system, you can use a Cloud
+Foundry service such as the MongoDB document database or a relational database like MySQL or Postgres.
+Another option is to use cloud storage providers such as [Amazon S3](http://aws.amazon.com/s3/), [Google Cloud Storage](https://cloud.google.com/products/cloud-storage), [Dropbox](https://www.dropbox.com/developers), or [Box](http://developers.box.com/).
+If your application needs to communicate across different instances of itself, consider a cache like Redis or a messaging-based architecture with RabbitMQ.
+
+### <a id="shared-cookies"></a>Cookies Accessible across Applications ###
+
+In an environment with shared domains, cookies might be accessible across applications.
+
+<%= vars.cookies_shared_domain_1 %> Many tracking tools such as Google Analytics and Mixpanel use the highest available domain to set their cookies. <%= vars.cookies_shared_domain_2 %> For example, an application at <code>my-app.<%= vars.app_domain %></code> might be able to access the cookies for an application at <code>your-app.<%= vars.app_domain %></code>.
+
+Consider whether you want your applications or tools that use cookies to set and store the cookies at the highest available domain.
+
+### <a id="ports"></a>Port Limitations ###
+
+<%=vars.port_limitations%>
+
+### <a id="moving-apps"></a> Cloud Foundry Updates and Your Application ###
+
+For application management purposes, Cloud Foundry may need to stop and restart your application instances. If this occurs, Cloud Foundry performs the following steps:
+
+1. Cloud Foundry sends a single <code>termination signal</code> to the root process that your start command invokes.
+
+1. Cloud Foundry waits 10 seconds to allow your application to cleanly shut down any child processes and handle any open connections.
+
+1. After 10 seconds, Cloud Foundry forcibly shuts down your application.
+
+Your application should accept and handle the termination signal to ensure that it shuts down gracefully.
+
+## <a id="exclude"></a>Ignore Unnecessary Files When Pushing ##
+
+By default, when you push an application, all files in the application’s project
+directory tree are uploaded to your Cloud Foundry instance, except version control or configuration files with the following file extensions:
+
+* `.cfignore`
+* `_darcs`
+* `.DS_Store`
+* `.git`
+* `.gitignore`
+* `.hg`
+* `/manifest.yml`
+* `.svn`
+
+If the application directory contains other files (such as `temp` or `log`
+files), or complete subdirectories that are not required to build and run your
+application, the best practice is to exclude them using a `.cfignore` file.
+(`.cfignore` is similar to git’s `.gitignore`, which allows you to exclude files
+and directories from git tracking.)
+Especially with a large application, uploading unnecessary files slows down
+application deployment.
+
+Specify the files or file types you wish to exclude from upload in a text file,
+named `.cfignore`, in the root of your application directory structure.
+For example, these lines exclude the "tmp" and "log" directories.
+
+<pre class="terminal">
+    tmp/
+    log/
+</pre>
+
+The file types you will want to exclude vary, based on the application
+frameworks you use.
+The `.gitignore` templates for common frameworks, available at
+https://github.com/github/gitignore, are a useful starting point.
+
+## <a id="increase-availability"></a>Run Multiple Instances to Increase Availability ##
+
+When a DEA is upgraded, the applications running on it are shut down gracefully,
+then restarted on another DEA. To avoid the risk of an application being unavailable
+during a Cloud Foundry upgrade processes, you should run more than one instance of the
+application.
+
+## <a id="buildpacks"></a>Using Buildpacks ##
+
+A buildpack consists of bundles of detection and configuration scripts that
+provide framework and runtime support for your applications.
+When you deploy an application that needs a buildpack, Cloud Foundry installs
+the buildpack on the Droplet Execution Agent (DEA) where the application runs.
+
+For more information, see the [Buildpacks](../../buildpacks/) topic.

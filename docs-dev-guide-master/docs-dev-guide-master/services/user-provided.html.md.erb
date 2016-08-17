@@ -1,0 +1,68 @@
+---
+title: User-Provided Service Instances
+owner: Core Services
+---
+
+<strong><%= modified_date %></strong>
+
+User-provided service instances enable developers to use services that are not available in the marketplace with their applications running on Cloud Foundry.
+
+User-provided service instances can be used to deliver service credentials to an application, and/or to trigger streaming of application logs to a syslog compatible consumer. These two functions can be used alone or at the same time.
+
+Once created, user-provided service instances behave like service instances created through the marketplace; see [Managing Service Instances](managing-services.html) and [Application Binding](application-binding.html) for details on listing, renaming, deleting, binding, and unbinding.
+
+## <a id='create'></a>Create a User-Provided Service Instance ##
+
+The alias for [cf create-user-provided-service](http://cli.cloudfoundry.org/en-US/cf/create-user-provided-service.html) is `cf cups`.
+
+### <a id='credentials'></a>Deliver Service Credentials to an Application ###
+
+Suppose a developer obtains a URL, port, username, and password for communicating with an Oracle database managed outside of Cloud Foundry. The developer could manually create custom environment variables to configure their application with these credentials (of course you would never hard code these credentials in your application!).
+
+User-provided service instances enable developers to configure their applications with these using the familiar [Application Binding](application-binding.html) operation and the same application runtime environment variable used by Cloud Foundry to automatically deliver credentials for marketplace services ([VCAP_SERVICES](../deploy-apps/environment-variable.html#VCAP-SERVICES)).
+
+<pre class="terminal">
+cf cups SERVICE_INSTANCE -p '{"username":"admin","password":"pa55woRD"}'
+</pre>
+
+To create a service instance in interactive mode, use the `-p` option with a comma-separated list of parameter names. The cf CLI will prompt you for each parameter value.
+
+<pre class="terminal">
+cf cups SERVICE_INSTANCE -p "host, port, dbname, username, password"
+</pre>
+
+Once the user-provided service instance is created, to deliver the credentials to one or more applications see [Application Binding](application-binding.html).
+
+### <a id='syslog'></a>Stream Application Logs to a Service ###
+
+User-provided service instances enable developers to stream applications logs to a syslog compatible aggregation or analytics service that isn't available in the marketplace. For more information on the syslog protocol see [RFC 5424](http://tools.ietf.org/html/rfc5424) and [RFC 6587](http://tools.ietf.org/html/rfc6587).
+
+Create the user-provided service instance, specifying the URL of the service with the `-l` option.
+
+<pre class="terminal">
+cf cups SERVICE_INSTANCE -l syslog://example.log-aggregator.com
+</pre>
+
+To stream application logs to the service, bind the user-provided service instance to your app.
+
+### <a id='route-service'></a> Proxy Application Requests to a Route Service ###
+User-provided service instances enable developers to proxy application requests to [route services](./index.html#route-services) for preprocessing. To create a user-provided service instance for a route service, specify the url for the route service using the `-r` option.
+
+<pre class="terminal">
+$ cf create-user-provided-service my-user-provided-route-service -r https://my-route-service.example.com
+Creating user provided service my-user-provided-route-service in org my-org / space my-space as user@example.com...
+OK
+</pre>
+
+<p class="note">
+<strong>Note</strong>: When creating the user-provided service, the route service url specified must be https.
+</p>
+
+In order to proxy requests to the user-provided route service, you will need to bind the service instance to the route.
+For more information, see [Manage Application Requests with Route Services](./route-binding.html).
+
+## <a id='update'></a> Update a User-provided Service Instance ###
+
+You can use [cf update-user-provided-service](http://cli.cloudfoundry.org/en-US/cf/update-user-provided-service.html) to update the attributes of an instance of a user-provided service. New credentials overwrite old credentials, and parameters not provided are deleted.
+
+The alias for `update-user-provided-service` is `uups`.
